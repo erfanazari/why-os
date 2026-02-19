@@ -30,6 +30,25 @@ pub enum Color {
     White = 15,
 }
 
+pub const ALL_COLORS: [Color; 16] = [
+    Color::Black,
+    Color::Blue,
+    Color::Green,
+    Color::Cyan,
+    Color::Red,
+    Color::Magenta,
+    Color::Brown,
+    Color::LightGray,
+    Color::DarkGray,
+    Color::LightBlue,
+    Color::LightGreen,
+    Color::LightCyan,
+    Color::LightRed,
+    Color::Pink,
+    Color::Yellow,
+    Color::White,
+];
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(transparent)]
 struct ColorCode(u8);
@@ -56,6 +75,8 @@ pub struct Writer {
     column_position: usize,
     row_position: usize,
     color_code: ColorCode,
+    background_color: Color,
+    foreground_color: Color,
     buffer: &'static mut Buffer
 }
 
@@ -63,6 +84,8 @@ lazy_static! {
     pub static ref WRITER: Mutex<Writer> = Mutex::new(Writer {
         column_position: 0,
         row_position: 0,
+        background_color: Color::Black,
+        foreground_color: Color::Green,
         color_code: ColorCode::new(Color::Green, Color::Black),
         buffer: unsafe { &mut *(0xb8000 as *mut Buffer) }
     });
@@ -76,6 +99,35 @@ impl Writer {
                 _ => self.write_byte(0xfe),
             }
         }
+    }
+
+    pub fn cursor_row(&self) -> usize {
+        self.row_position
+    }
+
+    pub fn cursor_col(&self) -> usize {
+        self.column_position
+    }
+
+    pub fn set_cursor(&mut self, row: usize, col: usize) {
+        self.row_position = row;
+        self.column_position = col;
+        self.update_cursor();
+    }
+
+    pub fn set_color_code(&mut self) {
+        self.color_code = ColorCode::new(self.foreground_color, self.background_color);
+        self.clear_screen();
+    }
+
+    pub fn set_foreground(&mut self, color: Color) {
+        self.foreground_color = color;
+        self.set_color_code();
+    }
+
+    pub fn set_background(&mut self, color: Color) {
+        self.background_color = color;
+        self.set_color_code();
     }
 
     pub fn write_byte(&mut self, byte: u8) {
@@ -162,6 +214,22 @@ impl Writer {
         }
         self.column_position = 0;
         self.row_position = 0;
+        self.update_cursor();
+    }
+
+    pub fn clear_current_line(&mut self) {
+        let row = self.row_position;
+
+        let blank = ScreenChar {
+            ascii_character: b' ',
+            color_code: self.color_code,
+        };
+
+        for col in 0..BUFFER_WIDTH {
+            self.buffer.chars[row][col].write(blank);
+        }
+
+        self.column_position = 0;
         self.update_cursor();
     }
 

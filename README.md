@@ -1,4 +1,4 @@
-# whyOS (Alpha) v0.0.1
+# whyOS v0.0.2
 
 **whyOS** is a tiny, unnecessary, meme-powered operating system written in Rust. It doesn’t have a real reason to exist — and that’s exactly why it does.
 
@@ -48,18 +48,23 @@ To run in QEMU:
 qemu-system-x86_64 -drive format=raw,file=target/x86_64-blog_os/debug/bootimage-why_os.bin
 ```
 
-> You can also try it on real hardware — it works (except for `bye`… for now 😳)
+> You can also try it on real hardware and kinda works.
 
 ---
 
 ## 🧑‍💻 CLI Commands
 
-| Command     | Description                                                             |
-|-------------|-------------------------------------------------------------------------|
-| `hello`     | Prints "Hello World!"                                                   |
-| `yeet`      | Clears the screen.                                                      |
-| `scream`    | Echoes your message back to you.                                        |
-| `bye`       | Shutdown the system. (Currently not working on real hardware) |
+| Command      | Description                                                                                                                    |
+|--------------|--------------------------------------------------------------------------------------------------------------------------------|
+| `hello`      | Prints "Hello World!"                                                                                                          |
+| `yeet`       | Clears the screen.                                                                                                             |
+| `scream`     | Echoes your message back to you.                                                                                               |
+| `bye`        | Shutdown the system. (Currently not working on real hardware)                                                                  |
+| `whyver`     | Shows the information about the current OS release on this system                                                              |
+| `listcolors` | Lists the available colors for this system.                                                                                    |
+| `setfg`      | Sets the foreground color (the text color) of the screen. The value must only be one of the ones shown in command `listcolors`.|
+| `setfg`      | Sets the background color of the screen. The value must only be one of the ones shown in command `listcolors`.                 |
+| `info`       | It explains what every command does.                                                                                           |
 
 ---
 

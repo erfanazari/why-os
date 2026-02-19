@@ -6,6 +6,7 @@ use core::panic::PanicInfo;
 use core::fmt::Write;
 
 mod drivers;
+mod os_info;
 mod macros;
 mod gdt;
 mod interrupts;
@@ -27,11 +28,15 @@ fn init() {
 #[unsafe(no_mangle)]
 pub extern "C" fn _start() -> ! {
     init();
-    println!("#########################");
-    println!("<         WhyOS         >");
-    println!("#                       #");
-    println!("#     v0.0.1  alpha     #");
-    println!("#########################\n");
+
+    println!("          _            ____   _____ ");
+    println!("         | |          / __ \\ / ____|");
+    println!("__      _| |__  _   _| |  | | (___  ");
+    println!("\\ \\ /\\ / / '_ \\| | | | |  | |\\___ \\ ");
+    println!(" \\ V  V /| | | | |_| | |__| |____) |");
+    println!("  \\_/\\_/ |_| |_|\\__, |\\____/|_____/ ");
+    println!("                 __/ |              ");
+    println!("                |___/    v{}     ", os_info::VERSION);
 
     crate::cli::CLI.lock().activate();
 

@@ -106,6 +106,7 @@ extern "x86-interrupt" fn keyboard_interrupt_handler(
                 }
                 DecodedKey::RawKey(key) => {
                     // Handle special keys if needed
+                    CLI.lock().handle_special_key(key);
                 }
             }
         }
