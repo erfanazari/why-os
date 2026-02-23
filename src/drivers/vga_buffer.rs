@@ -51,10 +51,10 @@ pub const ALL_COLORS: [Color; 16] = [
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(transparent)]
-struct ColorCode(u8);
+pub struct ColorCode(u8);
 
 impl ColorCode {
-    fn new(foreground: Color, background: Color) -> ColorCode {
+    pub fn new(foreground: Color, background: Color) -> ColorCode {
         ColorCode((background as u8) << 4 | (foreground as u8))
     }
 }
@@ -118,6 +118,10 @@ impl Writer {
     pub fn set_color_code(&mut self) {
         self.color_code = ColorCode::new(self.foreground_color, self.background_color);
         self.clear_screen();
+    }
+
+    pub fn set_custom_color_code(&mut self, color_code: ColorCode) {
+        self.color_code = color_code;
     }
 
     pub fn set_foreground(&mut self, color: Color) {
@@ -235,6 +239,7 @@ impl Writer {
 
     pub fn update_cursor(&self) {
         let pos = (self.row_position * BUFFER_WIDTH + self.column_position) as u16;
+        // let pos = (5 * BUFFER_WIDTH + 5) as u16;
 
         unsafe {
             let mut command_port: Port<u8> = Port::new(0x3D4);

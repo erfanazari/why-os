@@ -82,7 +82,7 @@ extern "x86-interrupt" fn keyboard_interrupt_handler(
     use pc_keyboard::{layouts, DecodedKey, HandleControl, Keyboard, ScancodeSet1};
     use spin::Mutex;
     use x86_64::instructions::port::Port;
-    use crate::cli::CLI;  // Add this
+    use crate::cli::CLI;
 
     lazy_static! {
         static ref KEYBOARD: Mutex<Keyboard<layouts::Us104Key, ScancodeSet1>> =
@@ -95,8 +95,8 @@ extern "x86-interrupt" fn keyboard_interrupt_handler(
 
     let mut keyboard = KEYBOARD.lock();
     let mut port = Port::new(0x60);
-
     let scancode: u8 = unsafe { port.read() };
+
     if let Ok(Some(key_event)) = keyboard.add_byte(scancode) {
         if let Some(key) = keyboard.process_keyevent(key_event) {
             match key {

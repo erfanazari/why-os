@@ -1,8 +1,10 @@
 use spin::Mutex;
 use lazy_static::lazy_static;
 use crate::drivers::vga_buffer::{WRITER, BUFFER_WIDTH, Color, ALL_COLORS};
-use crate::{println};
+use crate::{os_info, println};
 use pc_keyboard::KeyCode;
+use crate::ramfs;
+use alloc::string::{String, ToString};
 
 pub fn get_color_by_name(name: &str) -> Option<Color> {
     match name {
@@ -26,6 +28,28 @@ pub fn get_color_by_name(name: &str) -> Option<Color> {
     }
 }
 
+fn num_to_string(mut num: usize) -> String {
+    if num == 0 {
+        return String::from("0");
+    }
+
+    let mut buf = [0u8; 20]; // Enough for 64-bit numbers
+    let mut i = 20;
+    while num > 0 {
+        i -= 1;
+        buf[i] = b'0' + (num % 10) as u8;
+        num /= 10;
+    }
+
+    // Convert the relevant slice to String
+    let mut s = String::new();
+    for &b in &buf[i..] {
+        s.push(b as char);
+    }
+    s
+}
+
+
 const PROMPT: &str = "> ";
 const PROMPT_LEN: usize = 2;
 
@@ -35,6 +59,7 @@ pub struct Cli {
     cursor_index: usize,
     active: bool,
     prompt_row: usize,
+    current_dir: String,
 }
 
 fn delay() {
@@ -51,6 +76,7 @@ impl Cli {
             cursor_index: 0,
             active: false,
             prompt_row: 0,
+            current_dir: "/".to_string(),
         }
     }
 
@@ -69,7 +95,7 @@ impl Cli {
     fn display_prompt(&mut self) {
         let mut writer = WRITER.lock();
         self.prompt_row = writer.cursor_row();
-        writer.write_string(PROMPT);
+        writer.write_string((self.current_dir.clone() + PROMPT).as_str());
     }
 
     pub fn handle_input(&mut self, c: char) {
@@ -110,7 +136,7 @@ impl Cli {
         let mut writer = WRITER.lock();
 
         // How many rows the input occupies
-        let total_len = PROMPT_LEN + self.buffer_index;
+        let total_len = (self.current_dir.clone() + PROMPT).as_str().len() + self.buffer_index;
         let rows = total_len / BUFFER_WIDTH + 1;
 
         // Clear all affected rows
@@ -123,7 +149,7 @@ impl Cli {
         writer.set_cursor(self.prompt_row, 0);
 
         // Draw prompt
-        writer.write_string(PROMPT);
+        writer.write_string((self.current_dir.clone() + PROMPT).as_str());
 
         // Draw input buffer
         for i in 0..self.buffer_index {
@@ -131,7 +157,7 @@ impl Cli {
         }
 
         // Absolute cursor positioning
-        let visual_index = PROMPT_LEN + self.cursor_index;
+        let visual_index = (self.current_dir.clone() + PROMPT).as_str().len() + self.cursor_index;
         let row_offset = visual_index / BUFFER_WIDTH;
         let col = visual_index % BUFFER_WIDTH;
 
@@ -187,6 +213,70 @@ impl Cli {
         let args = parts.next().unwrap_or("");
 
         match command {
+            "ls" => {
+                if let Some(entries) = ramfs::list_dir(&*self.current_dir, args) {
+                    for e in entries {
+                        println!(" - {}", e);
+                    }
+                }
+            },
+            "banner" => {
+                println!("          _            ____   _____ ");
+                println!("         | |          / __ \\ / ____|");
+                println!("__      _| |__  _   _| |  | | (___  ");
+                println!("\\ \\ /\\ / / '_ \\| | | | |  | |\\___ \\ ");
+                println!(" \\ V  V /| | | | |_| | |__| |____) |");
+                println!("  \\_/\\_/ |_| |_|\\__, |\\____/|_____/ ");
+                println!("                 __/ |              ");
+                println!("                |___/    v{}     \n", os_info::VERSION);
+            },
+            "memtest" => {
+                let mut file_index = 0;
+
+                loop {
+                    // Generate unique filename: file_0.txt, file_1.txt, ...
+                    let mut filename = String::from("file_");
+                    filename.push_str(&num_to_string(file_index));
+                    filename.push_str(".txt");
+
+                    let success = ramfs::create_file(&*self.current_dir, &filename, "HEEsduhkghdfjkhdfkjghdfjkghdfkghdfkjghdfkjghdfkjghdfkjghdfghdfjkghdfjkghdfkghdfkjghdfkghdfjkghdfjkghdfjkghdfjkghdfjghdfkghdfjkghdfkjghdfjkghdfkjghdfjkghdfjkghdfkjghdfjkghdfkghdfjkhdfjkghdfjkghdfkhdfgjkdfgfgddfjkhdfjkdfgjkhdfg".as_ref());
+                    if !success {
+                        println!("Failed to create file {}", filename);
+                        break;
+                    }
+
+                    if file_index % 100 == 0 {
+                        println!("Created {} files so far...", file_index);
+                    }
+
+                    file_index += 1;
+                }
+
+                println!("Stress test finished. Created {} files.", file_index);
+            },
+            "cd" => {
+                if let Some(new_dir) = ramfs::change_directory(&*self.current_dir, args) {
+                    self.current_dir = new_dir;
+                    println!("Changed to {}", self.current_dir); // "/home"
+                } else {
+                    println!("Path not found!");
+                }
+            },
+            "mkfile" => {
+                ramfs::create_file(&*self.current_dir, args, "".as_ref());
+            },
+            "mkdir" => {
+                ramfs::mkdir(&*self.current_dir, args);
+            },
+            "rem" => {
+                ramfs::delete(&*self.current_dir, args);
+            },
+            "readfile" => {
+                if let Some(data) = ramfs::read_file(&*self.current_dir, args) {
+                    let text = core::str::from_utf8(&data).unwrap();
+                    println!("file contents: {}", text);
+                }
+            },
             "hello" => println!("Hello World!"),
             "whyver" => {
                 println!("OS Name: {}", crate::os_info::NAME);
@@ -196,38 +286,80 @@ impl Cli {
             },
             "info" => {
                 match args {
+                    "ls" => {
+                        println!("Lists files and directories in the current directory.");
+                    }
+                    "cd" => {
+                        println!("Changes the current directory.\nUsage: cd <path>");
+                    }
+                    "mkfile" => {
+                        println!("Creates an empty file in the current directory.\nUsage: mkfile <filename>");
+                    }
+                    "mkdir" => {
+                        println!("Creates a new directory in the current directory.\nUsage: mkdir <dirname>");
+                    }
+                    "rem" => {
+                        println!("Removes a file or directory.\nUsage: rem <name>");
+                    }
+                    "readfile" => {
+                        println!("Reads and prints the contents of a file.\nUsage: readfile <filename>");
+                    }
+                    "banner" => {
+                        println!("Displays the system banner and OS version.");
+                    }
+                    "whyver" => {
+                        println!("Shows information about the current OS release.");
+                    }
+                    "memtest" => {
+                        println!(
+                            "Stress-tests the RAM filesystem by continuously creating files\n\
+                 until allocation fails. Useful for testing memory limits."
+                        );
+                    }
                     "hello" => {
-                        println!("It prints \"Hello World!\" on the screen.");
-                    },
+                        println!("Prints \"Hello World!\" to the screen.");
+                    }
                     "scream" => {
-                        println!("It echoes your message back to you.");
-                    },
+                        println!("Echoes the given text back to the screen.\nUsage: scream <text>");
+                    }
                     "yeet" => {
                         println!("Clears the screen.");
-                    },
+                    }
                     "bye" => {
                         println!("Shuts down the system. (may not work on real hardware)");
-                    },
+                    }
                     "oops" => {
                         println!("Reboots the system. (may not work on real hardware)");
-                    },
+                    }
                     "listcolors" => {
-                        println!("Lists the available colors for this system.");
-                    },
+                        println!("Lists all available text colors.");
+                    }
                     "setfg" => {
-                        println!("Sets the foreground color (the text color) of the screen.\nThe value must only be one of the ones shown in command \"listcolors\".");
-                    },
-                    "setfg" => {
-                        println!("Sets the background color of the screen.\nThe value must only be one of the ones shown in command \"listcolors\".");
-                    },
-                    "whyver" => {
-                        println!("Shows the information about the current OS release on this system.");
-                    },
+                        println!(
+                            "Sets the foreground (text) color.\n\
+                 Usage: setfg <color>\n\
+                 Available colors can be seen using \"listcolors\"."
+                        );
+                    }
+                    "setbg" => {
+                        println!(
+                            "Sets the background color.\n\
+                 Usage: setbg <color>\n\
+                 Available colors can be seen using \"listcolors\"."
+                        );
+                    }
                     "info" => {
-                        println!("It explains what every command does.");
-                    },
+                        println!(
+                            "Explains what a command does.\n\
+                 Usage: info <command>"
+                        );
+                    }
+                    "" => {
+                        println!("Usage: info <command>");
+                        println!("Try: info ls");
+                    }
                     _ => {
-                        println!("Unknown command: {}", args);
+                        println!("No information available for command: {}", args);
                     }
                 }
             },
@@ -254,15 +386,28 @@ impl Cli {
                 println!("See ya, nerd.");
                 delay();
                 delay();
-                use x86_64::instructions::port::Port;
+
+                // 1️⃣ Try QEMU ACPI poweroff
                 unsafe {
+                    use x86_64::instructions::port::Port;
                     let mut port: Port<u16> = Port::new(0x604);
                     port.write(0x2000);
                 }
+
+                delay();
+                delay();
+
+                unsafe {
+                    use x86_64::instructions::port::Port;
+                    let mut port: Port<u8> = Port::new(0x64);
+                    while port.read() & 0x02 != 0 {}
+                    port.write(0xFE);
+                }
+
                 loop {
                     x86_64::instructions::hlt();
                 }
-            }
+            },
             "oops" => {
                 println!("Oopsie daisy. Rebooting...");
                 delay();
@@ -273,7 +418,7 @@ impl Cli {
                     while port.read() & 0x02 != 0 {}
                     port.write(0xFE);
                 }
-            }
+            },
             "" => {}
             _ => println!("Unknown command: {}", command),
         }
